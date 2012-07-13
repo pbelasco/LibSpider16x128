@@ -7,26 +7,39 @@
 #define FONT_COUNT_5x7  5
 #define START_CHARS_5x7 6
 //Constantes de Buffer
-#define TYPEOF         uint8_t
-#define BITSIZE        8
-#define NUMVARS        16
-#define NUMROWS        16
+#define TYPEOF          uint8_t
+#define BITSIZE         8
+#define BITSIZE_MINONE  7
+#define NUMVARS         32 //Buffer size/Bits per var
 
-#define MASK_PIN_3     B00001000
-#define MASK_PIN_2     B00000100
-#define MASK_PIN_8     B00000001
-#define L0             4
-#define L1             7
-#define L2             5
-#define SEX            6
-#define SEY            9
-#define SERI           3
-#define SECK           2
-#define RECK           8
+#define WINDOW_W	128
+#define WINDOW_H	16
+
+
+#define MASK_SECK  	0b00000100 //2 PORTD
+#define MASK_SERI  	0b00001000 //3 PORTD
+#define MASK_L0    	0b00010000 //4 PORTD
+#define MASK_L2    	0b00100000 //5 PORTD
+#define MASK_SEX   	0b01000000 //6 PORTD
+#define MASK_L1    	0b10000000 //7 PORTD
+#define MASK_RECK  	0b00000001 //8 PORTB
+#define MASK_SEY   	0b00000010 //9 PORTB
+
+#define L0             	4
+#define L1             	7
+#define L2             	5
+#define SEX            	6
+#define SEY            	9
+#define SERI           	3
+#define SECK           	2
+#define RECK           	8
+
+//Variveis Globais 
+TYPEOF buffer[WINDOW_H][NUMVARS];  //Buffer
 
 void printbufferSerial(TYPEOF m[][NUMVARS], int xini=0, int yini=0) {
   int i, j = 0;
-  for(i=0; i<NUMROWS; i++) {
+  for(i=0; i<WINDOW_H; i++) {
     for(j=0; j<BITSIZE*NUMVARS; j++) { 
       Serial.print(readbit(m[i+xini], j+yini) ? '#' : '.' );
     }
@@ -37,61 +50,75 @@ void printbufferSerial(TYPEOF m[][NUMVARS], int xini=0, int yini=0) {
 
 void printbuffer(TYPEOF m[][NUMVARS], int xini=0, int yini=0) {
   int i, j = 0;
-  for(i=yini; i<NUMROWS; i++) {
-    selectline(i);
-    for(j=xini; j<NUMVARS*BITSIZE; j++){
+  for(i=0; i<16; i++) {
+    fast_selectline(i);
+    for(j=0; j<128; j++){
       spitbit(readbit(m[i], j));
     } 
     latch();
   }
 }
 
-void selectline(byte n) {
-  digitalWrite(SEX, (n & 0x08) ? HIGH : LOW);
-  digitalWrite(SEY, (n & 0x08) ? LOW : HIGH);
-  digitalWrite(L0,  (n & 0x01) ? HIGH : LOW);
-  digitalWrite(L1,  (n & 0x02) ? HIGH : LOW);
-  digitalWrite(L2,  (n & 0x04) ? HIGH : LOW); 
+//Seleciona uma linha com base 
+//nos pinos SEX, SEY, L0, L1, L2
+void fast_selectline(byte n) {
+  --n;
+  if (n & 0x08) {
+    PORTD |=  MASK_SEX; //6
+    PORTB &= ~MASK_SEY; //9
+  } else {
+    PORTD &= ~MASK_SEX; //6
+    PORTB |=  MASK_SEY; //9
+  }
+  if (n & 0x01) //4
+    PORTD |= MASK_L0;
+  else
+    PORTD &= ~MASK_L0;
+    
+  if (n & 0x02) //7
+    PORTD |= MASK_L1;
+  else
+    PORTD &= ~MASK_L1;
+
+  if (n & 0x04) //5
+    PORTD |= MASK_L2;
+  else 
+    PORTD &= ~MASK_L2;
 }
-void spitbit(boolean b){
+void spitbit(volatile boolean b){
   //escreve status na porta 3
-  if(b == true) PORTD ^= MASK_PIN_3;
-  clock();
-  PORTD &= ~MASK_PIN_3; //Retorna a porta para low
+  if(b) {
+    PORTD |= MASK_SERI;
+    clock();
+    PORTD &= ~MASK_SERI; //Retorna a porta para low
+  } else
+    clock();
 }
 void clock(){
-  PORTD &=  ~MASK_PIN_2;
-  PORTD ^=   MASK_PIN_2;
+  PORTD ^= MASK_SECK;
+  PORTD ^= MASK_SECK;
 }
 
 void latch(){
-  PORTB ^= MASK_PIN_8; 
-  PORTB &= ~MASK_PIN_8;
+  PORTB  ^= MASK_RECK; 
+  PORTB  ^= MASK_RECK;
 }
 
-void clearbuffer (TYPEOF buffer[][NUMVARS]) {
-  for (int j=0; j<NUMROWS; j++)
+void clearbuffer () {
+  for (int j=0; j<WINDOW_H; j++)
     for (int i=0; i<NUMVARS; i++)
       buffer[j][i]=0;
 }
 
-void invertbuffer (TYPEOF buffer[][NUMVARS]) {
-  for (int j=0; j<NUMROWS; j++)
-    for (int i=0; i<NUMVARS*BITSIZE; i++)
-      setbit(buffer[j], readbit(buffer[j], i) ? false : true, i);
-}
-
 void drawline(TYPEOF m[][NUMVARS],int x1,int y1,int x2,int y2) {
-  clearbuffer(m);
+  clearbuffer();
   int x,y;
-  for(x=x1; x<=x2; x++) //we follow x coord. one-by-one
-    {
-      y=y1+(((y2-y1)/(x2-x1))*(x-x1)); //y is the same precentage of trip x made on its trip
+  for(x=x1; x<=x2; x++) {
+      y=y1+(((y2-y1)/(x2-x1))*(x-x1));
       setbit(m[y], x, true);
     }
 } 
-
-void enqueueChar5x7 (byte c, TYPEOF buffer[][NUMVARS], int xPos=0, int yPos=0)
+void enqueueChar5x7 (byte c, int xPos=0, int yPos=0)
 {
   uint8_t m, j, i;			                    //bitmask and iterators
   uint8_t off = pgm_read_byte (FONT + FIRST_CHAR_5x7); //offset of charset
@@ -100,46 +127,66 @@ void enqueueChar5x7 (byte c, TYPEOF buffer[][NUMVARS], int xPos=0, int yPos=0)
   int zc = int(FONT) + START_CHARS_5x7;	                //index of 0 char
   for (i = 0; i < h; i++) { 
     for (j = 0; j < w; j++) {
-        setbit(buffer[i+yPos],(pgm_read_byte(zc+((c-off)*w)+j) & (1<<i)) ? true : false, j+xPos );
+        setbit(buffer[i+yPos], j+xPos, (pgm_read_byte(zc+((c-off)*w)+j) & (1<<i)));
     }
   }
 }
 
 boolean readbit (TYPEOF buffer[], int pos) {
-  return (buffer[pos/BITSIZE] & (1 << (BITSIZE-(pos%BITSIZE))-1)) ? true : false;
+  return (buffer[pos/BITSIZE] & (1 << (BITSIZE_MINONE-(pos%BITSIZE))));
 }
 
-void setbit(TYPEOF buffer[], boolean value, int pos) {
-  TYPEOF bitmask = (1 << BITSIZE-(pos%BITSIZE)-1);
-  if (value == true) {
+void setbit(TYPEOF buffer[], int pos, boolean value) {
+  TYPEOF bitmask = (1 << BITSIZE_MINONE-(pos%BITSIZE));
+  if (value) {
       buffer[pos/BITSIZE] |= bitmask;
-  } else if (value == false) {
+  } else {
     buffer[pos/BITSIZE] &= ~bitmask;
   }
 }
 
-//Variveis Globais 
-TYPEOF buffer[NUMROWS][NUMVARS];  //Buffer
+void setuptimer(int divider=670) {
+       // initialize Timer1
+    cli();          // disable global interrupts
+    TCCR1A = 0;     // set entire TCCR1A register to 0
+    TCCR1B = 0;     // same for TCCR1B
+    // set compare match register to desired timer count:
+    OCR1A = divider;
+    // turn on CTC mode:
+    TCCR1B |= (1 << WGM12);
+    // Set CS10 and CS12 bits for 1024 prescaler:
+    TCCR1B |= (1 << CS10);
+        // Set ONLY CS12 bits for 256 prescaler:
+    TCCR1B |= (1 << CS12);
+    // enable timer compare interrupt:
+    TIMSK1 |= (1 << OCIE1A);
+    // enable global interrupts:
+    sei();
+}
 
 void setup () {
   for(byte p = 2; p <=9; p++ ) {
     pinMode(p, OUTPUT);
     digitalWrite(p, LOW);
   }
-  clearbuffer(buffer);
+  Serial.begin(9600);
+  setuptimer();
+  clearbuffer();
 }
 
 char ch;
-int xpos, ypos = 0;
-int i, j;
+int chCnt, xpos, ypos, i, j, k = 0;
 void loop () {
-  clearbuffer(buffer);
-  for (i=0;i<NUMROWS; i++) {
-    for (j=0;j<NUMVARS*BITSIZE; j++) {
-      //drawline(buffer, j- NUMVARS*BITSIZE, i, NUMVARS*BITSIZE - j, i);
-      setbit(buffer[i],j,true);
-      printbuffer(buffer);
-    }
+  while (Serial.available()) {
+    // get the new byte:
+    enqueueChar5x7((char)Serial.read(), xpos, ypos);
+    xpos += 6;
+    chCnt++;
+    if ((chCnt%19) == 0) { ypos += 8; xpos = 0; }
   }
 }
 
+ISR(TIMER1_COMPA_vect)
+{
+  printbuffer(buffer);
+}
