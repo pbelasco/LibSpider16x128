@@ -234,7 +234,7 @@ void loop () {
     enqueueChar5x7((char)Serial.read(), xpos, ypos);
     xpos += 6;
     chCnt++;
-    if ((chCnt%20) == 0) { ypos += 8; xpos = 0; }
+    if ((chCnt%19) == 0) { ypos += 8; xpos = 0; }
   }
 }
 

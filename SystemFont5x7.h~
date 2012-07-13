@@ -50,6 +50,11 @@
 #define SYSTEM5x7_WIDTH 5
 #define SYSTEM5x7_HEIGHT 7
 
+/*
+ * added to allow fontname to match header file name. 
+ * as well as keep the old name for backward compability
+ */
+
 #define SystemFont5x7 System5x7
 
 static uint8_t System5x7[] PROGMEM = {
@@ -158,4 +163,5 @@ static uint8_t System5x7[] PROGMEM = {
 	0x08, 0x1C, 0x2A, 0x08, 0x08 // <-
     
 };
+
 #endif
