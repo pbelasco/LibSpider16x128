@@ -52,7 +52,7 @@ Where, the function of each port is defined by:
 */
 
 #include "SystemFont5x7.h"
-#include "messages.h"
+//#include "messages.h"
 //Definição de constantes de fontes
 #define FONT            System5x7
 #define CHAR_WIDTH_5x7  2
